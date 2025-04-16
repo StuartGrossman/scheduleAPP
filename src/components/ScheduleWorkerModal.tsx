@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Worker } from '../types/Worker';
 import { scheduleService } from '../services/scheduleService';
+import { addDays, format, isAfter, isBefore, eachDayOfInterval } from 'date-fns';
 
 interface ScheduleWorkerModalProps {
   isOpen: boolean;
@@ -10,7 +11,8 @@ interface ScheduleWorkerModalProps {
 }
 
 const ScheduleWorkerModal: React.FC<ScheduleWorkerModalProps> = ({ isOpen, onClose, worker, onScheduleUpdated }) => {
-  const [scheduleDate, setScheduleDate] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
   const [notes, setNotes] = useState('');
@@ -20,21 +22,39 @@ const ScheduleWorkerModal: React.FC<ScheduleWorkerModalProps> = ({ isOpen, onClo
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      // Create a new schedule
-      const scheduleData = {
-        workerId: worker.id,
-        workerName: worker.name,
-        startTime: `${scheduleDate}T${startTime}:00`,
-        endTime: `${scheduleDate}T${endTime}:00`,
-        position: worker.position,
-        date: new Date(scheduleDate),
-        notes
-      };
+      const start = new Date(startDate);
+      const end = new Date(endDate);
 
-      await scheduleService.addSchedule(scheduleData);
+      // Validate date range
+      if (isAfter(start, end)) {
+        alert('End date must be after start date');
+        return;
+      }
+
+      // Get all days in the range
+      const days = eachDayOfInterval({ start, end });
+      const schedules = [];
+
+      // Create schedules for each day
+      for (const day of days) {
+        const scheduleData = {
+          workerId: worker.id,
+          workerName: worker.name,
+          startTime: `${format(day, 'yyyy-MM-dd')}T${startTime}:00`,
+          endTime: `${format(day, 'yyyy-MM-dd')}T${endTime}:00`,
+          position: worker.position,
+          date: day,
+          notes
+        };
+        schedules.push(scheduleData);
+      }
+
+      // Add all schedules
+      await Promise.all(schedules.map(schedule => scheduleService.addSchedule(schedule)));
+      
       onScheduleUpdated();
       onClose();
-      alert('Schedule updated successfully!');
+      alert(`Schedule updated successfully from ${format(start, 'MMM d')} to ${format(end, 'MMM d')}!`);
     } catch (error) {
       console.error('Error updating schedule:', error);
       alert('Failed to update schedule. Please try again.');
@@ -57,16 +77,31 @@ const ScheduleWorkerModal: React.FC<ScheduleWorkerModalProps> = ({ isOpen, onClo
         
         <form onSubmit={handleSubmit} className="modal-body">
           <div className="form-group">
-            <label htmlFor="scheduleDate" className="form-label">
-              Date
+            <label htmlFor="startDate" className="form-label">
+              Start Date
             </label>
             <input
-              id="scheduleDate"
+              id="startDate"
               type="date"
-              value={scheduleDate}
-              onChange={(e) => setScheduleDate(e.target.value)}
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
               className="form-input"
               min={new Date().toISOString().split('T')[0]}
+              required
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="endDate" className="form-label">
+              End Date
+            </label>
+            <input
+              id="endDate"
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="form-input"
+              min={startDate || new Date().toISOString().split('T')[0]}
               required
             />
           </div>

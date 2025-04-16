@@ -4,6 +4,7 @@ export interface Worker {
   position: string;
   email: string;
   phone: string;
+  tier: string;
   availability: {
     [day: string]: {
       start: string;

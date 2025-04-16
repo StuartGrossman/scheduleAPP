@@ -14,6 +14,7 @@ const AddWorkerModal: React.FC<AddWorkerModalProps> = ({ isOpen, onClose, onWork
     position: '',
     email: '',
     phone: '',
+    tier: '1',
     availability: {}
   });
 
@@ -23,15 +24,20 @@ const AddWorkerModal: React.FC<AddWorkerModalProps> = ({ isOpen, onClose, onWork
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      // Add the worker first
-      await workerService.addWorker(worker);
+      // Ensure all required fields are present
+      if (!worker.name || !worker.position) {
+        alert('Name and position are required');
+        return;
+      }
+
+      const addedWorker = await workerService.addWorker(worker as Worker);
       
       // Then schedule them if date and time are provided
       if (scheduleDate && scheduleTime) {
         // Here you would call your scheduling service
         // For now, we'll just log it
         console.log('Scheduling worker:', {
-          workerId: worker.id,
+          workerId: addedWorker.id,
           date: scheduleDate,
           time: scheduleTime
         });
@@ -43,6 +49,7 @@ const AddWorkerModal: React.FC<AddWorkerModalProps> = ({ isOpen, onClose, onWork
         position: '',
         email: '',
         phone: '',
+        tier: '1',
         availability: {}
       });
       setScheduleDate('');
@@ -98,6 +105,23 @@ const AddWorkerModal: React.FC<AddWorkerModalProps> = ({ isOpen, onClose, onWork
               placeholder="e.g., Software Engineer"
               required
             />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="tier" className="form-label">
+              Tier
+            </label>
+            <select
+              id="tier"
+              value={worker.tier}
+              onChange={(e) => setWorker({ ...worker, tier: e.target.value })}
+              className="form-input"
+              required
+            >
+              <option value="1">Tier 1</option>
+              <option value="2">Tier 2</option>
+              <option value="3">Tier 3</option>
+            </select>
           </div>
 
           <div className="form-group">

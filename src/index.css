@@ -853,40 +853,121 @@ h2 {
 }
 
 /* Estimates Page */
+.estimates-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.month-navigation {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.month-navigation h2 {
+  margin: 0;
+  min-width: 200px;
+  text-align: center;
+}
+
+.month-navigation button {
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+}
+
 .estimates-summary {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
   margin-bottom: 2rem;
 }
 
 .summary-card {
-  background-color: white;
-  border-radius: 8px;
+  background: white;
   padding: 1.5rem;
+  border-radius: 0.5rem;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   text-align: center;
 }
 
 .summary-card h3 {
-  color: #7f8c8d;
+  margin: 0 0 0.5rem 0;
+  color: #666;
   font-size: 1rem;
-  margin-bottom: 0.5rem;
 }
 
 .summary-value {
-  font-size: 2rem;
-  font-weight: 600;
-  color: #2c3e50;
   margin: 0;
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: #333;
+}
+
+.tier-estimates {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.tier-estimate-card {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 0.5rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  text-align: center;
+  border-left: 4px solid;
 }
 
 .chart-container {
-  margin-top: 1.5rem;
-  padding: 1rem;
-  background-color: white;
-  border-radius: 8px;
+  background: white;
+  padding: 1.5rem;
+  border-radius: 0.5rem;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin-bottom: 2rem;
+}
+
+.tier-breakdown {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.tier-breakdown-item {
+  background: white;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border-left: 4px solid;
+}
+
+.tier-breakdown-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.tier-breakdown-info h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.tier-breakdown-info p {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: bold;
+}
+
+.tier-breakdown-details {
+  display: flex;
+  justify-content: space-between;
+  color: #666;
+  font-size: 0.9rem;
 }
 
 /* Settings Page */
@@ -962,4 +1043,112 @@ h2 {
   color: #7f8c8d;
   font-size: 0.875rem;
   margin-bottom: 1rem;
+}
+
+.tier-button {
+  transition: all 0.2s ease-in-out;
+  cursor: pointer;
+  border: none;
+  outline: none;
+}
+
+.tier-button:hover {
+  transform: scale(1.05);
+  filter: brightness(1.1);
+}
+
+.tier-button.bg-blue-100 {
+  background-color: #dbeafe;
+}
+
+.tier-button.bg-green-100 {
+  background-color: #dcfce7;
+}
+
+.tier-button.bg-purple-100 {
+  background-color: #f3e8ff;
+}
+
+.tier-button.text-blue-800 {
+  color: #1e40af;
+}
+
+.tier-button.text-green-800 {
+  color: #166534;
+}
+
+.tier-button.text-purple-800 {
+  color: #6b21a8;
+}
+
+.tier-options {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.tier-option {
+  padding: 1rem;
+  border-radius: 8px;
+  font-size: 1.125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  border: 2px solid transparent;
+  text-align: center;
+}
+
+.tier-option:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.tier-option.selected {
+  border-color: currentColor;
+  box-shadow: 0 0 0 2px currentColor;
+}
+
+.tier-option.bg-blue-100 {
+  background-color: #dbeafe;
+  color: #1e40af;
+}
+
+.tier-option.bg-green-100 {
+  background-color: #dcfce7;
+  color: #166534;
+}
+
+.tier-option.bg-purple-100 {
+  background-color: #f3e8ff;
+  color: #6b21a8;
+}
+
+.tier-estimates {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.tier-estimate-card {
+  background: white;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  text-align: center;
+  border-left: 4px solid;
+}
+
+.tier-estimate-card h3 {
+  margin: 0;
+  color: #666;
+  font-size: 1rem;
+}
+
+.tier-estimate-card .summary-value {
+  margin: 0.5rem 0 0;
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: #333;
 }
