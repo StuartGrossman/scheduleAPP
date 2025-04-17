@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../firebase/config';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths } from 'date-fns';
+import { format, startOfMonth, endOfMonth, addMonths, subMonths, eachDayOfInterval } from 'date-fns';
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -27,14 +27,10 @@ ChartJS.register(
 interface TimeSlot {
   id: string;
   workerId: string;
+  tierId: string;
   startTime: string;
   endTime: string;
-}
-
-interface Worker {
-  id: string;
-  name: string;
-  tierId: string;
+  durationInHours: number;
 }
 
 interface Tier {
@@ -48,28 +44,41 @@ interface DailySummary {
   date: string;
   hours: number;
   cost: number;
-  tierBreakdown: {
-    [tierId: string]: {
-      hours: number;
-      cost: number;
-    };
-  };
+  tierBreakdown: { [key: string]: { hours: number; cost: number } };
+}
+
+interface TierTotal {
+  name: string;
+  hours: number;
+  cost: number;
+  color: string;
+}
+
+interface MonthlyTotals {
+  totalHours: number;
+  totalCost: number;
+  tierTotals: { [key: string]: TierTotal };
+}
+
+interface ProcessedData {
+  dailySummaries: DailySummary[];
+  monthlyTotals: MonthlyTotals;
 }
 
 const Estimates: React.FC = () => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
-  const [workers, setWorkers] = useState<Worker[]>([]);
+  const [totalHours, setTotalHours] = useState(0);
+  const [totalCost, setTotalCost] = useState(0);
   const [tiers, setTiers] = useState<Tier[]>([]);
   const [loading, setLoading] = useState(true);
-  const [processedData, setProcessedData] = useState<{
-    dailySummaries: DailySummary[];
+  const [processedData, setProcessedData] = useState<ProcessedData>({
+    dailySummaries: [],
     monthlyTotals: {
-      totalHours: number;
-      totalCost: number;
-      tierTotals: { [key: string]: { name: string; hours: number; cost: number; color: string } };
-    };
-  } | null>(null);
+      totalHours: 0,
+      totalCost: 0,
+      tierTotals: {}
+    }
+  });
 
   useEffect(() => {
     fetchData();
@@ -81,19 +90,13 @@ const Estimates: React.FC = () => {
       const startDate = startOfMonth(currentMonth);
       const endDate = endOfMonth(currentMonth);
 
-      // Get all workers and their tiers first
-      const workersSnapshot = await getDocs(collection(db, 'workers'));
+      // Get all tiers first
       const tiersSnapshot = await getDocs(collection(db, 'tiers'));
-      
-      const workersList = workersSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Worker[];
-      
       const tiersList = tiersSnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as Tier[];
+      setTiers(tiersList);
 
       // Get schedules for the month
       const schedulesSnapshot = await getDocs(query(
@@ -107,14 +110,75 @@ const Estimates: React.FC = () => {
         ...doc.data()
       })) as TimeSlot[];
 
-      setWorkers(workersList);
-      setTiers(tiersList);
-      setTimeSlots(schedulesList);
+      // Calculate daily summaries
+      const dailySummaries: DailySummary[] = [];
+      const days = eachDayOfInterval({ start: startDate, end: endDate });
 
-      // Calculate processed data
-      const dailySummaries = calculateDailySummary();
-      const monthlyTotals = calculateMonthlyTotals(dailySummaries);
-      
+      days.forEach(day => {
+        const dayStr = format(day, 'yyyy-MM-dd');
+        const daySchedules = schedulesList.filter(schedule => 
+          schedule.startTime.startsWith(dayStr)
+        );
+
+        const tierBreakdown: { [key: string]: { hours: number; cost: number } } = {};
+        let totalHours = 0;
+        let totalCost = 0;
+
+        daySchedules.forEach(schedule => {
+          const tier = tiersList.find(t => t.id === schedule.tierId);
+          if (tier) {
+            const hours = schedule.durationInHours || 0;
+            const cost = hours * tier.hourlyRate;
+            
+            if (!tierBreakdown[tier.id]) {
+              tierBreakdown[tier.id] = { hours: 0, cost: 0 };
+            }
+            
+            tierBreakdown[tier.id].hours += hours;
+            tierBreakdown[tier.id].cost += cost;
+            totalHours += hours;
+            totalCost += cost;
+          }
+        });
+
+        dailySummaries.push({
+          date: dayStr,
+          hours: totalHours,
+          cost: totalCost,
+          tierBreakdown
+        });
+      });
+
+      // Calculate monthly totals
+      const monthlyTotals: MonthlyTotals = {
+        totalHours: 0,
+        totalCost: 0,
+        tierTotals: {}
+      };
+
+      dailySummaries.forEach(summary => {
+        monthlyTotals.totalHours += summary.hours;
+        monthlyTotals.totalCost += summary.cost;
+
+        Object.entries(summary.tierBreakdown).forEach(([tierId, breakdown]) => {
+          if (!monthlyTotals.tierTotals[tierId]) {
+            const tier = tiersList.find(t => t.id === tierId);
+            if (tier) {
+              monthlyTotals.tierTotals[tierId] = {
+                name: tier.name,
+                hours: 0,
+                cost: 0,
+                color: tier.color
+              };
+            }
+          }
+          if (monthlyTotals.tierTotals[tierId]) {
+            monthlyTotals.tierTotals[tierId].hours += breakdown.hours;
+            monthlyTotals.tierTotals[tierId].cost += breakdown.cost;
+          }
+        });
+      });
+
       setProcessedData({
         dailySummaries,
         monthlyTotals
@@ -126,95 +190,6 @@ const Estimates: React.FC = () => {
     }
   };
 
-  const calculateMonthlyTotals = (dailySummaries: DailySummary[]) => {
-    const tierTotals: { [key: string]: { name: string; hours: number; cost: number; color: string } } = {};
-    
-    // Initialize tier totals
-    tiers.forEach(tier => {
-      tierTotals[tier.id] = {
-        name: tier.name,
-        hours: 0,
-        cost: 0,
-        color: tier.color
-      };
-    });
-
-    let totalHours = 0;
-    let totalCost = 0;
-
-    // Sum up daily totals
-    dailySummaries.forEach(day => {
-      totalHours += day.hours || 0;
-      totalCost += day.cost || 0;
-      
-      Object.entries(day.tierBreakdown || {}).forEach(([tierId, breakdown]) => {
-        if (tierTotals[tierId]) {
-          tierTotals[tierId].hours += breakdown?.hours || 0;
-          tierTotals[tierId].cost += breakdown?.cost || 0;
-        }
-      });
-    });
-
-    return {
-      totalHours,
-      totalCost,
-      tierTotals
-    };
-  };
-
-  const calculateDailySummary = () => {
-    // Get all days in the month
-    const days = eachDayOfInterval({
-      start: startOfMonth(currentMonth),
-      end: endOfMonth(currentMonth)
-    });
-
-    return days.map(day => {
-      const dayStr = format(day, 'yyyy-MM-dd');
-      
-      // Get all slots for this day
-      const daySlots = timeSlots.filter(slot => {
-        const slotDate = new Date(slot.startTime);
-        return format(slotDate, 'yyyy-MM-dd') === dayStr;
-      });
-
-      // Initialize tier breakdown
-      const tierBreakdown: { [tierId: string]: { hours: number; cost: number } } = {};
-      tiers.forEach(tier => {
-        tierBreakdown[tier.id] = { hours: 0, cost: 0 };
-      });
-
-      // Calculate totals
-      let totalHours = 0;
-      let totalCost = 0;
-
-      daySlots.forEach(slot => {
-        const worker = workers.find(w => w.id === slot.workerId);
-        if (!worker) return;
-
-        const tier = tiers.find(t => t.id === worker.tierId);
-        if (!tier) return;
-
-        const start = new Date(slot.startTime);
-        const end = new Date(slot.endTime);
-        const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-        const cost = hours * tier.hourlyRate;
-
-        tierBreakdown[tier.id].hours += hours;
-        tierBreakdown[tier.id].cost += cost;
-        totalHours += hours;
-        totalCost += cost;
-      });
-
-      return {
-        date: format(day, 'MMM d'),
-        hours: totalHours,
-        cost: totalCost,
-        tierBreakdown
-      };
-    });
-  };
-
   const handlePreviousMonth = () => {
     setCurrentMonth(subMonths(currentMonth, 1));
   };
@@ -223,63 +198,9 @@ const Estimates: React.FC = () => {
     setCurrentMonth(addMonths(currentMonth, 1));
   };
 
-  if (loading || !processedData) {
+  if (loading) {
     return <div className="container">Loading...</div>;
   }
-
-  // Use processedData for the chart
-  const chartData = {
-    labels: processedData.dailySummaries.map(day => day.date),
-    datasets: tiers.map(tier => ({
-      label: `${tier.name} Hours`,
-      data: processedData.dailySummaries.map(day => day.tierBreakdown[tier.id]?.hours || 0),
-      borderColor: tier.color,
-      backgroundColor: `${tier.color}33`,
-      tension: 0.4,
-      yAxisID: 'y'
-    })).concat(tiers.map(tier => ({
-      label: `${tier.name} Cost`,
-      data: processedData.dailySummaries.map(day => day.tierBreakdown[tier.id]?.cost || 0),
-      borderColor: tier.color,
-      backgroundColor: `${tier.color}33`,
-      tension: 0.4,
-      yAxisID: 'y1',
-      borderDash: [5, 5]
-    })))
-  };
-
-  const chartOptions = {
-    responsive: true,
-    plugins: {
-      legend: {
-        position: 'top' as const,
-      },
-      title: {
-        display: true,
-        text: 'Daily Hours and Costs by Tier'
-      }
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        title: {
-          display: true,
-          text: 'Hours'
-        }
-      },
-      y1: {
-        beginAtZero: true,
-        position: 'right' as const,
-        title: {
-          display: true,
-          text: 'Cost ($)'
-        },
-        grid: {
-          drawOnChartArea: false
-        }
-      }
-    }
-  };
 
   return (
     <div className="container">
@@ -299,55 +220,28 @@ const Estimates: React.FC = () => {
       <div className="estimates-summary">
         <div className="summary-card">
           <h3>Total Hours</h3>
-          <p className="summary-value">{(processedData?.monthlyTotals?.totalHours || 0).toFixed(1)}</p>
+          <p className="summary-value">{processedData.monthlyTotals.totalHours.toFixed(1)}</p>
         </div>
         <div className="summary-card">
           <h3>Total Cost</h3>
-          <p className="summary-value">${(processedData?.monthlyTotals?.totalCost || 0).toFixed(2)}</p>
+          <p className="summary-value">${processedData.monthlyTotals.totalCost.toFixed(2)}</p>
         </div>
       </div>
 
       {tiers.map(tier => {
-        const tierData = processedData?.monthlyTotals?.tierTotals?.[tier.id] || {
-          name: tier.name,
-          hours: 0,
-          cost: 0,
-          color: tier.color
-        };
-
-        const tierChartData = {
-          labels: processedData?.dailySummaries?.map(day => day.date) || [],
-          datasets: [
-            {
-              label: 'Hours',
-              data: processedData?.dailySummaries?.map(day => day.tierBreakdown?.[tier.id]?.hours || 0) || [],
-              borderColor: tier.color,
-              backgroundColor: `${tier.color}33`,
-              tension: 0.4,
-              yAxisID: 'y'
-            },
-            {
-              label: 'Cost',
-              data: processedData?.dailySummaries?.map(day => day.tierBreakdown?.[tier.id]?.cost || 0) || [],
-              borderColor: tier.color,
-              backgroundColor: `${tier.color}33`,
-              tension: 0.4,
-              yAxisID: 'y1',
-              borderDash: [5, 5]
-            }
-          ]
-        };
+        const tierHours = processedData.monthlyTotals.tierTotals[tier.id]?.hours || 0;
+        const tierCost = processedData.monthlyTotals.tierTotals[tier.id]?.cost || 0;
 
         return (
           <div key={tier.id} className="card">
             <div className="tier-estimates">
               <div className="tier-estimate-card" style={{ borderLeftColor: tier.color }}>
                 <h3>{tier.name} Hours</h3>
-                <p className="summary-value">{tierData.hours.toFixed(1)}</p>
+                <p className="summary-value">{tierHours.toFixed(1)}</p>
               </div>
               <div className="tier-estimate-card" style={{ borderLeftColor: tier.color }}>
                 <h3>{tier.name} Cost</h3>
-                <p className="summary-value">${tierData.cost.toFixed(2)}</p>
+                <p className="summary-value">${tierCost.toFixed(2)}</p>
               </div>
               <div className="tier-estimate-card" style={{ borderLeftColor: tier.color }}>
                 <h3>Hourly Rate</h3>
@@ -355,7 +249,42 @@ const Estimates: React.FC = () => {
               </div>
             </div>
             <div className="chart-container">
-              <Line data={tierChartData} options={chartOptions} />
+              <Line 
+                data={{
+                  labels: processedData.dailySummaries.map(day => day.date),
+                  datasets: [
+                    {
+                      label: `${tier.name} Cost`,
+                      data: processedData.dailySummaries.map(day => day.tierBreakdown[tier.id]?.cost || 0),
+                      borderColor: tier.color,
+                      backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                      borderWidth: 2,
+                      fill: true
+                    }
+                  ]
+                }} 
+                options={{
+                  responsive: true,
+                  plugins: {
+                    legend: {
+                      position: 'top' as const,
+                    },
+                    title: {
+                      display: true,
+                      text: 'Daily Costs by Tier'
+                    }
+                  },
+                  scales: {
+                    y: {
+                      beginAtZero: true,
+                      title: {
+                        display: true,
+                        text: 'Cost ($)'
+                      }
+                    }
+                  }
+                }} 
+              />
             </div>
           </div>
         );

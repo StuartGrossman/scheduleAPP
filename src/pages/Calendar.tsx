@@ -4,6 +4,15 @@ import { Worker } from '../types/Worker';
 import { workerService } from '../services/workerService';
 import { scheduleService } from '../services/scheduleService';
 import DayDetailsModal from '../components/DayDetailsModal';
+import { collection, getDocs, query, where } from 'firebase/firestore';
+import { db } from '../firebase/config';
+
+interface Tier {
+  id: string;
+  name: string;
+  hourlyRate: number;
+  color: string;
+}
 
 interface TimeSlot {
   id: string;
@@ -13,6 +22,8 @@ interface TimeSlot {
   endTime: string;
   position: string;
   date: Date;
+  tierId?: string;
+  tierColor?: string;
 }
 
 interface DaySchedule {
@@ -27,6 +38,50 @@ const Calendar: React.FC = () => {
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [schedules, setSchedules] = useState<DaySchedule[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isDayDetailsOpen, setIsDayDetailsOpen] = useState(false);
+  const [selectedDaySlots, setSelectedDaySlots] = useState<TimeSlot[]>([]);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const startDate = startOfMonth(currentDate);
+      const endDate = endOfMonth(currentDate);
+      
+      // Get all tiers first
+      const tiersSnapshot = await getDocs(collection(db, 'tiers'));
+      const tiersList = tiersSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Tier[];
+      
+      // Get schedules for the month
+      const schedulesData = await scheduleService.getSchedules(startDate, endDate);
+      
+      // Organize schedules by day
+      const daysInMonth = eachDayOfInterval({ start: startDate, end: endDate });
+      const schedulesByDay = daysInMonth.map(day => ({
+        date: day,
+        timeSlots: schedulesData
+          .filter(slot => {
+            const slotDate = new Date(slot.startTime);
+            return format(slotDate, 'yyyy-MM-dd') === format(day, 'yyyy-MM-dd');
+          })
+          .map(slot => {
+            const tier = tiersList.find(t => t.id === slot.tierId);
+            return {
+              ...slot,
+              tierColor: tier?.color
+            };
+          })
+      }));
+      
+      setSchedules(schedulesByDay);
+    } catch (error) {
+      console.error('Error fetching schedules:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -68,19 +123,40 @@ const Calendar: React.FC = () => {
   };
 
   const handleDayClick = (day: Date) => {
-    const daySchedule = schedules.find(s => s.date.getTime() === day.getTime());
+    const daySlots = schedules.find(s => s.date.getTime() === day.getTime())?.timeSlots || [];
     setSelectedDate(day);
-    setSelectedDaySchedule(daySchedule || null);
+    setSelectedDaySlots(daySlots);
+    setIsDayDetailsOpen(true);
   };
 
-  const getTimeSlotColor = (position: string) => {
-    const colors: Record<string, string> = {
-      'Developer': '#e3f2fd',
-      'Designer': '#e8f5e9',
-      'Manager': '#fff3e0',
-      'default': '#f5f5f5'
-    };
-    return colors[position] || colors.default;
+  const handleScheduleDeleted = () => {
+    fetchData(); // Refresh the data after deletion
+    setIsDayDetailsOpen(false); // Close the modal
+  };
+
+  const getTimeSlotColor = (tierColor?: string) => {
+    if (tierColor) {
+      // Convert hex to rgba with 0.1 opacity for background
+      const hexToRgb = (hex: string) => {
+        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        return result ? {
+          r: parseInt(result[1], 16),
+          g: parseInt(result[2], 16),
+          b: parseInt(result[3], 16)
+        } : null;
+      };
+
+      const rgb = hexToRgb(tierColor);
+      if (rgb) {
+        return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.1)`;
+      }
+    }
+    return '#f5f5f5'; // Default color if no tier color is available
+  };
+
+  const handleViewSchedule = (slot: TimeSlot) => {
+    // Implement the logic to view the schedule for the selected slot
+    console.log('View schedule for:', slot);
   };
 
   if (loading) {
@@ -144,7 +220,10 @@ const Calendar: React.FC = () => {
                     <div 
                       key={slot.id} 
                       className="calendar-slot"
-                      style={{ backgroundColor: getTimeSlotColor(slot.position) }}
+                      style={{ 
+                        backgroundColor: getTimeSlotColor(slot.tierColor),
+                        borderLeft: `4px solid ${slot.tierColor || '#ccc'}`
+                      }}
                     >
                       <div className="calendar-slot-worker">
                         <strong>{slot.workerName}</strong>
@@ -162,10 +241,11 @@ const Calendar: React.FC = () => {
       {/* Day Details Modal */}
       {selectedDate && (
         <DayDetailsModal
-          isOpen={!!selectedDate}
-          onClose={() => setSelectedDate(null)}
+          isOpen={isDayDetailsOpen}
+          onClose={() => setIsDayDetailsOpen(false)}
           date={selectedDate}
-          timeSlots={selectedDaySchedule?.timeSlots || []}
+          timeSlots={selectedDaySlots}
+          onScheduleDeleted={handleScheduleDeleted}
         />
       )}
     </div>

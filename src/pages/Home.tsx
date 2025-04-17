@@ -37,6 +37,7 @@ const Home: React.FC = () => {
       </main>
 
       {/* Footer */}
+      <br></br>
       <footer className="card">
         <div className="card-body">
           <p className="text-center">

@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { Worker } from '../types/Worker';
+import { Worker, TimeSlot } from '../types/Worker';
 import { workerService } from '../services/workerService';
 import { scheduleService } from '../services/scheduleService';
 import EditWorkerModal from './EditWorkerModal';
 import ScheduleWorkerModal from './ScheduleWorkerModal';
 import ViewScheduleModal from './ViewScheduleModal';
 import { format } from 'date-fns';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../firebase/config';
 
 interface Tier {
@@ -92,10 +92,51 @@ const WorkersList: React.FC = () => {
     if (!selectedWorker) return;
     
     try {
+      // Get the tier details for the new tier
+      const newTierData = tiers.find(t => t.id === newTier);
+      if (!newTierData) {
+        throw new Error('Tier not found');
+      }
+      
+      const { color: tierColor, hourlyRate } = newTierData;
+      if (!tierColor || typeof hourlyRate !== 'number') {
+        throw new Error('Invalid tier data');
+      }
+
+      // Update worker's tier information
       await workerService.updateWorker(selectedWorker.id, {
         ...selectedWorker,
-        tier: newTier
+        tier: newTier,
+        tierId: newTier
       });
+
+      // Get all schedules for the worker
+      const schedulesSnapshot = await getDocs(query(
+        collection(db, 'schedules'),
+        where('workerId', '==', selectedWorker.id)
+      ));
+
+      // Update each schedule with the new tier information
+      const updatePromises = schedulesSnapshot.docs.map(async (doc) => {
+        const scheduleData = doc.data() as TimeSlot;
+        
+        // Calculate duration in hours if not already present
+        const durationInHours = scheduleData.durationInHours || 
+          (new Date(scheduleData.endTime).getTime() - new Date(scheduleData.startTime).getTime()) / (1000 * 60 * 60);
+        
+        // Update the schedule with new tier information
+        await scheduleService.updateSchedule(doc.id, {
+          ...scheduleData,
+          tierId: newTier,
+          tierColor,
+          hourlyRate,
+          durationInHours
+        });
+      });
+
+      // Wait for all schedule updates to complete
+      await Promise.all(updatePromises);
+      
       fetchData(); // Refresh the list
       setIsTierModalOpen(false);
     } catch (error) {
@@ -104,7 +145,9 @@ const WorkersList: React.FC = () => {
     }
   };
 
-  const getTierColor = (tierId: string) => {
+  const getTierColor = (tierId: string | undefined) => {
+    if (!tierId) return 'bg-gray-100 text-gray-800';
+    
     const tier = tiers.find(t => t.id === tierId);
     if (!tier) return 'bg-gray-100 text-gray-800';
     
@@ -169,7 +212,7 @@ const WorkersList: React.FC = () => {
                         color: typeof tierColor === 'object' ? tierColor.color : 'inherit'
                       }}
                     >
-                      {tier?.name || 'No Tier'}
+                      {tier?.name + ' Tier' || 'No Tier'}
                     </button>
                   </div>
                   <p className="position">{worker.position}</p>

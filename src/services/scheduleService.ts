@@ -1,5 +1,5 @@
 import { db } from '../firebase/config';
-import { collection, query, where, getDocs, addDoc, updateDoc, doc } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, updateDoc, doc, deleteDoc } from 'firebase/firestore';
 import { TimeSlot } from '../types/Worker';
 
 export const scheduleService = {
@@ -24,7 +24,10 @@ export const scheduleService = {
         startTime: data.startTime,
         endTime: data.endTime,
         position: data.position,
-        date: new Date(data.startTime)
+        date: new Date(data.startTime),
+        tierId: data.tierId || undefined,
+        durationInHours: data.durationInHours || undefined,
+        notes: data.notes || undefined
       });
     });
     
@@ -38,6 +41,7 @@ export const scheduleService = {
       ...schedule,
       startTime: new Date(schedule.startTime).toISOString(),
       endTime: new Date(schedule.endTime).toISOString(),
+      tierId: schedule.tierId || null
     });
     return docRef.id;
   },
@@ -52,5 +56,11 @@ export const scheduleService = {
       updates.endTime = new Date(updates.endTime).toISOString();
     }
     await updateDoc(scheduleRef, updates);
+  },
+
+  // Delete a schedule
+  async deleteSchedule(scheduleId: string): Promise<void> {
+    const scheduleRef = doc(db, 'schedules', scheduleId);
+    await deleteDoc(scheduleRef);
   }
 }; 

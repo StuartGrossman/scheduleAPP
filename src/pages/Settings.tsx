@@ -36,6 +36,12 @@ const Settings: React.FC = () => {
   const handleAddTier = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      // Validate hourly rate
+      if (isNaN(newTier.hourlyRate) || newTier.hourlyRate < 0) {
+        console.error('Invalid hourly rate');
+        return;
+      }
+
       const docRef = await addDoc(collection(db, 'tiers'), newTier);
       setTiers([...tiers, { id: docRef.id, ...newTier }]);
       setNewTier({ name: '', hourlyRate: 0, color: '#3498db' });
@@ -91,8 +97,18 @@ const Settings: React.FC = () => {
             <input
               type="number"
               id="hourlyRate"
-              value={newTier.hourlyRate}
-              onChange={(e) => setNewTier({ ...newTier, hourlyRate: parseFloat(e.target.value) })}
+              value={newTier.hourlyRate === 0 ? '' : newTier.hourlyRate}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value === '') {
+                  setNewTier({ ...newTier, hourlyRate: 0 });
+                } else {
+                  const rate = parseFloat(value);
+                  if (!isNaN(rate) && rate >= 0) {
+                    setNewTier({ ...newTier, hourlyRate: rate });
+                  }
+                }
+              }}
               required
               min="0"
               step="0.01"
